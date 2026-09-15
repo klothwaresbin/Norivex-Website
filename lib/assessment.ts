@@ -11,11 +11,12 @@ export type AssessmentPayload = {
   message: string;
   scopeAuthorization: boolean;
   businessAuthorization: boolean;
+  honeypot: string;
 };
 
 export type AssessmentFieldErrors = Record<string, string>;
 
-type RequiredTextField = Exclude<keyof AssessmentPayload, 'scopeAuthorization' | 'businessAuthorization'>;
+type RequiredTextField = Exclude<keyof AssessmentPayload, 'scopeAuthorization' | 'businessAuthorization' | 'honeypot'>;
 
 const emailPattern = /^\S+@\S+\.\S+$/;
 

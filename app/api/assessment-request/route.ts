@@ -47,7 +47,13 @@ export async function POST(request: Request) {
     message: readString(body.message),
     scopeAuthorization: body.scopeAuthorization === true,
     businessAuthorization: body.businessAuthorization === true,
+    honeypot: readString(body.honeypot),
   };
+
+  // Reject the hidden anti-spam field before checking configuration or contacting Resend.
+  if (payload.honeypot) return json({ error: 'Unable to process this request.' }, 400);
+
+  // Future Turnstile integration belongs here: verify its server-side token before Resend.
   const fields = validateAssessmentPayload(payload);
 
   if (Object.keys(fields).length > 0) return json({ error: 'Please correct the highlighted fields.', fields }, 422);
