@@ -1,4 +1,11 @@
+import type { Metadata } from 'next';
 import { LegalPage } from '../../components/legal-page';
+
+export const metadata: Metadata = {
+  title: 'Assessment Terms',
+  description: 'Scope, authorization, and limitations for Norivex Cyber introductory security assessments.',
+  alternates: { canonical: '/assessment-terms' },
+};
 
 export default function AssessmentTermsPage() {
   return <LegalPage eyebrow="Assessment terms" title="Clear boundaries before any review begins." intro="These terms describe the current scope and expectations for Norivex Cyber’s introductory, permission-based security assessments." sections={[
