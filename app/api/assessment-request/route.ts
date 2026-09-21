@@ -2,6 +2,10 @@ import { Resend } from 'resend';
 import { type AssessmentPayload, validateAssessmentPayload } from '../../../lib/assessment';
 
 type JsonObject = Record<string, unknown>;
+type TurnstileVerification = { success?: boolean; ['error-codes']?: string[] };
+
+const MAX_REQUEST_BYTES = 16 * 1024;
+const SITEVERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
 
 function isJsonObject(value: unknown): value is JsonObject {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -16,7 +20,49 @@ function escapeHtml(value: string) {
 }
 
 function json(body: JsonObject, status: number) {
-  return Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
+  return Response.json(body, {
+    status,
+    headers: {
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+    },
+  });
+}
+
+function requestOriginAllowed(request: Request) {
+  const origin = request.headers.get('Origin');
+  if (!origin) return true;
+
+  try {
+    const url = new URL(origin);
+    if (url.origin === 'https://norivexcyber.date') return true;
+    if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return true;
+    return url.hostname.endsWith('.workers.dev');
+  } catch {
+    return false;
+  }
+}
+
+async function verifyTurnstile(token: string, request: Request) {
+  const secret = process.env.TURNSTILE_SECRET_KEY;
+  if (!secret) return true;
+  if (!token) return false;
+
+  const form = new FormData();
+  form.set('secret', secret);
+  form.set('response', token);
+
+  const remoteIp = request.headers.get('CF-Connecting-IP');
+  if (remoteIp) form.set('remoteip', remoteIp);
+
+  try {
+    const response = await fetch(SITEVERIFY_URL, { method: 'POST', body: form });
+    if (!response.ok) return false;
+    const result = (await response.json()) as TurnstileVerification;
+    return result.success === true;
+  } catch {
+    return false;
+  }
 }
 
 export async function GET() {
@@ -24,10 +70,32 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  let body: unknown;
+  if (!requestOriginAllowed(request)) return json({ error: 'Request origin is not allowed.' }, 403);
 
+  const contentType = request.headers.get('Content-Type') ?? '';
+  if (!contentType.toLowerCase().startsWith('application/json')) {
+    return json({ error: 'Content-Type must be application/json.' }, 415);
+  }
+
+  const declaredLength = Number(request.headers.get('Content-Length') ?? '0');
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_REQUEST_BYTES) {
+    return json({ error: 'Request is too large.' }, 413);
+  }
+
+  let rawBody: string;
   try {
-    body = await request.json();
+    rawBody = await request.text();
+  } catch {
+    return json({ error: 'Unable to read request body.' }, 400);
+  }
+
+  if (new TextEncoder().encode(rawBody).byteLength > MAX_REQUEST_BYTES) {
+    return json({ error: 'Request is too large.' }, 413);
+  }
+
+  let body: unknown;
+  try {
+    body = JSON.parse(rawBody);
   } catch {
     return json({ error: 'Request body must be valid JSON.' }, 400);
   }
@@ -48,15 +116,17 @@ export async function POST(request: Request) {
     scopeAuthorization: body.scopeAuthorization === true,
     businessAuthorization: body.businessAuthorization === true,
     honeypot: readString(body.honeypot),
+    turnstileToken: readString(body.turnstileToken),
   };
 
-  // Reject the hidden anti-spam field before checking configuration or contacting Resend.
   if (payload.honeypot) return json({ error: 'Unable to process this request.' }, 400);
 
-  // Future Turnstile integration belongs here: verify its server-side token before Resend.
   const fields = validateAssessmentPayload(payload);
-
   if (Object.keys(fields).length > 0) return json({ error: 'Please correct the highlighted fields.', fields }, 422);
+
+  if (!(await verifyTurnstile(payload.turnstileToken, request))) {
+    return json({ error: 'Bot verification failed. Please refresh the page and try again.' }, 403);
+  }
 
   const apiKey = process.env.RESEND_API_KEY;
   const destination = process.env.ASSESSMENT_NOTIFICATION_EMAIL;
@@ -69,7 +139,6 @@ export async function POST(request: Request) {
 
   try {
     const resend = new Resend(apiKey);
-    // Use Resend's test sender while developing; configure a verified production sender later.
     const { data, error } = await resend.emails.send({
       from: process.env.RESEND_FROM_EMAIL ?? 'onboarding@resend.dev',
       to: destination,
