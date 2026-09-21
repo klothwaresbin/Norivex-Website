@@ -1,4 +1,11 @@
+import type { Metadata } from 'next';
 import { LegalPage } from '../../components/legal-page';
+
+export const metadata: Metadata = {
+  title: 'Privacy Policy',
+  description: 'How Norivex Cyber handles information submitted through assessment requests and related website activity.',
+  alternates: { canonical: '/privacy' },
+};
 
 export default function PrivacyPage() {
   return <LegalPage eyebrow="Privacy policy" title="A straightforward approach to your information." intro="This policy explains what Norivex Cyber collects through assessment requests, why it is needed, and how it is handled when you choose to get in touch." sections={[
