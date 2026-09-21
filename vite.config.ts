@@ -15,6 +15,10 @@ const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === 'seatbelt';
 const localBindingConfig = {
   main: 'vinext/server/fetch-handler',
   compatibility_flags: ['nodejs_compat'],
+  vars: {
+    ASSESSMENT_NOTIFICATION_EMAIL: 'connor@norivexcyber.date',
+    RESEND_FROM_EMAIL: 'Norivex Cyber <connor@norivexcyber.date>',
+  },
   d1_databases: d1
     ? [
         {
