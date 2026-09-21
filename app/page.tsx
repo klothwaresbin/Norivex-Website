@@ -46,8 +46,9 @@ function AssessmentForm() {
   useEffect(() => {
     let cancelled = false;
     fetch('/api/turnstile-config', { cache: 'no-store' })
-      .then(response => response.ok ? response.json() : Promise.reject(new Error('Unable to load bot verification.')))
-      .then((data: { siteKey?: string }) => {
+      .then(async response => {
+        if (!response.ok) throw new Error('Unable to load bot verification.');
+        const data = await response.json() as { siteKey?: string };
         if (!cancelled && data.siteKey) setTurnstileSiteKey(data.siteKey);
       })
       .catch(() => {
